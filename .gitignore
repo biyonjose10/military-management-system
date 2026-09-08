@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files. Real secrets never land in the repo; the template does, because a
+# checkout with no .env.example gives no clue which two Neon URLs are needed.
 .env*
+!.env.example
 
 # vercel
 .vercel

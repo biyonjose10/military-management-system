@@ -1,0 +1,330 @@
+// Military Management System — data model.
+//
+// Every row in this schema is fictional demo data. The model is written as if
+// it were real because the access-control exercise is only meaningful against a
+// realistic shape, not because any of it describes an actual formation.
+//
+// Two structural decisions carry most of the weight:
+//
+//   1. Unit stores BOTH parentId (the truth) and path (a denormalized
+//      materialized path like "/1/4/12/"). Subtree queries are then a plain
+//      indexed `path startsWith` scan instead of a recursive CTE, which would
+//      require $queryRaw and throw away Prisma's types at exactly the boundary
+//      where a mistake leaks the entire roster.
+//
+//   2. AuditLog is append-only and deliberately denormalized. It keeps the
+//      actor's email, role and unit path as plain strings so the trail survives
+//      deletion of the rows it describes — an audit entry with a dangling
+//      foreign key is useless in the one moment it matters.
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Access role. Deliberately a different axis from Rank: a Commander outranks a
+/// Medical Officer but still may not write medical readiness.
+enum Role {
+  COMMANDER
+  MEDICAL_OFFICER
+  QUARTERMASTER
+  SQUAD_LEADER
+}
+
+enum Echelon {
+  BRIGADE
+  BATTALION
+  COMPANY
+  PLATOON
+  SQUAD
+}
+
+enum RankCategory {
+  OFFICER
+  WARRANT
+  ENLISTED
+}
+
+enum Rank {
+  // Enlisted
+  PRIVATE
+  PRIVATE_FIRST_CLASS
+  SPECIALIST
+  CORPORAL
+  SERGEANT
+  STAFF_SERGEANT
+  SERGEANT_FIRST_CLASS
+  MASTER_SERGEANT
+  FIRST_SERGEANT
+  SERGEANT_MAJOR
+
+  // Warrant
+  WARRANT_OFFICER_1
+  CHIEF_WARRANT_OFFICER_2
+  CHIEF_WARRANT_OFFICER_3
+  CHIEF_WARRANT_OFFICER_4
+  CHIEF_WARRANT_OFFICER_5
+
+  // Officer
+  SECOND_LIEUTENANT
+  FIRST_LIEUTENANT
+  CAPTAIN
+  MAJOR
+  LIEUTENANT_COLONEL
+  COLONEL
+}
+
+enum ReadinessStatus {
+  DEPLOYABLE
+  LIMITED_DUTY
+  NON_DEPLOYABLE
+}
+
+enum EquipmentCategory {
+  WEAPON
+  VEHICLE
+  COMMS
+  RATIONS
+}
+
+enum EquipmentStatus {
+  OPERATIONAL
+  IN_MAINTENANCE
+  DEADLINE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  RESTORE
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  PERMISSION_DENIED
+}
+
+// ---------------------------------------------------------------------------
+// Organisation
+// ---------------------------------------------------------------------------
+
+model Unit {
+  id Int @id @default(autoincrement())
+
+  /// Short designation, e.g. "2-14 IN / A / 1PLT". Unique so the seed is idempotent.
+  designation String  @unique
+  name        String
+  echelon     Echelon
+
+  parentId Int?
+  parent   Unit?  @relation("UnitTree", fields: [parentId], references: [id])
+  children Unit[] @relation("UnitTree")
+
+  /// Materialized path of ancestor ids, slash-delimited and slash-terminated at
+  /// both ends: "/1/4/12/". Terminated on both ends so startsWith("/1/4/") can
+  /// never match "/1/40/" — the prefix-collision bug that silently widens a
+  /// scope. Derived from parentId; `npm run verify` asserts the two agree.
+  path String
+
+  personnel Personnel[]
+  equipment Equipment[]
+  users     User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([path])
+  @@index([parentId])
+}
+
+model User {
+  id String @id @default(cuid())
+
+  email String @unique
+  name  String
+
+  /// bcryptjs. Never bcrypt or argon2 — this machine has no toolchain for
+  /// native builds, and a demo that cannot npm install is worthless.
+  passwordHash String
+
+  role Role
+
+  unitId Int
+  unit   Unit @relation(fields: [unitId], references: [id])
+
+  /// Denormalized copy of unit.path, put into the JWT at sign-in so proxy.ts can
+  /// make coarse decisions without a database round-trip. Never trusted as the
+  /// scope itself — resolveScope() re-reads it from the database.
+  unitPath String
+
+  /// Deactivation must take effect on the next request, not at token expiry.
+  active Boolean @default(true)
+
+  /// Incremented to revoke every outstanding token for this user. Compared on
+  /// every authenticated request; this is what gives a stateless JWT a
+  /// revocation point at all.
+  tokenVersion Int @default(0)
+
+  lastLoginAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([unitId])
+}
+
+// ---------------------------------------------------------------------------
+// Personnel
+// ---------------------------------------------------------------------------
+
+model Personnel {
+  id String @id @default(cuid())
+
+  /// PII. Masked to the last four digits for roles that may not see it — see
+  /// lib/dto/personnel.ts. Masking happens at serialization, never in a
+  /// component, because a component that masks still ships the real value
+  /// inside the RSC payload.
+  serviceId String @unique
+
+  lastName     String
+  firstName    String
+  rank         Rank
+  rankCategory RankCategory
+
+  unitId Int
+  unit   Unit @relation(fields: [unitId], references: [id])
+
+  readiness ReadinessStatus @default(DEPLOYABLE)
+
+  // Medical. Writable by MEDICAL_OFFICER only; a Commander may read but not
+  // write, and a Quartermaster may not even read.
+  medicalNotes        String?
+  medicalClearedUntil DateTime?
+  lastPhysicalAt      DateTime?
+
+  // Contact PII.
+  phone                 String?
+  email                 String?
+  dateOfBirth           DateTime
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
+  enlistedAt    DateTime
+  deployedUntil DateTime?
+
+  /// Soft delete. Every scoped read filters deletedAt: null; the row stays so
+  /// the audit trail that references it keeps meaning something.
+  deletedAt DateTime?
+
+  assignedEquipment Equipment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([unitId])
+  @@index([readiness])
+  @@index([deletedAt])
+  @@index([lastName, firstName])
+}
+
+// ---------------------------------------------------------------------------
+// Logistics
+// ---------------------------------------------------------------------------
+
+model Equipment {
+  id String @id @default(cuid())
+
+  serialNumber String @unique
+
+  /// National stock number. Not unique — many items share a stock number.
+  nsn      String
+  name     String
+  category EquipmentCategory
+  status   EquipmentStatus   @default(OPERATIONAL)
+
+  unitId Int
+  unit   Unit @relation(fields: [unitId], references: [id])
+
+  assignedToId String?
+  assignedTo   Personnel? @relation(fields: [assignedToId], references: [id])
+
+  acquiredAt       DateTime
+  lastServicedAt   DateTime?
+  nextServiceDueAt DateTime?
+
+  deletedAt DateTime?
+
+  maintenanceLogs MaintenanceLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([unitId])
+  @@index([status])
+  @@index([category])
+  @@index([assignedToId])
+  @@index([deletedAt])
+}
+
+model MaintenanceLog {
+  id String @id @default(cuid())
+
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
+
+  /// The status the item was put into when this log was opened.
+  status     EquipmentStatus
+  summary    String
+  technician String
+  laborHours Float?
+
+  @@index([equipmentId])
+  @@index([openedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+/// Append-only. Written inside the same transaction as the mutation it
+/// describes, so an unaudited write cannot exist.
+model AuditLog {
+  id String @id @default(cuid())
+
+  at DateTime @default(now())
+
+  /// Loose strings, not foreign keys, on purpose — see the header note.
+  actorId       String?
+  actorEmail    String
+  actorRole     Role
+  actorUnitPath String
+
+  action      AuditAction
+  resource    String
+  targetId    String
+  targetLabel String
+
+  /// Changed field NAMES ONLY — never their values. Storing values would make
+  /// the audit viewer a complete bypass of the PII masking layer, which is the
+  /// single most tempting mistake in this whole design.
+  changedFields String[]
+
+  /// First hop of x-forwarded-for, or "unknown" in local development. Never a
+  /// fabricated value.
+  ip        String
+  userAgent String?
+
+  @@index([at])
+  @@index([resource, targetId])
+  @@index([actorUnitPath])
+  @@index([actorEmail])
+}
