@@ -171,6 +171,26 @@ export function fieldGroup(
 }
 
 /**
+ * Fields only a Medical Officer may write.
+ *
+ * Deliberately WIDER than MEDICAL_FIELDS, and the difference is the whole
+ * point of the exercise. `readiness` is *read* by everybody — it is on every
+ * roster row and it is the headline figure on the dashboard — but deciding
+ * that a soldier is non-deployable is a medical judgement, not a command one.
+ *
+ * This is the rule the brief calls out: a Commander outranks a Medical Officer
+ * and still may not write medical readiness. Anyone "fixing" it so that a
+ * Commander can set deployability has inverted the design, not repaired it.
+ *
+ * Read groups and write groups are therefore not the same mapping: `fieldGroup`
+ * answers "who may SEE this", the set below answers "who may CHANGE it".
+ */
+const MEDICALLY_WRITABLE: ReadonlySet<string> = new Set<string>([
+  ...MEDICAL_FIELDS,
+  "readiness",
+]);
+
+/**
  * May this role write this specific Personnel field?
  *
  * Used by the PATCH route before anything is written. A field in a restricted
@@ -179,6 +199,11 @@ export function fieldGroup(
  * `read` on `personnel`, cannot rename a soldier while updating their profile.
  */
 export function canWriteField(role: Role, field: string): boolean {
-  const group = fieldGroup(field);
-  return group ? can(role, group, "update") : can(role, "personnel", "update");
+  if (MEDICALLY_WRITABLE.has(field)) {
+    return can(role, "personnel.medical", "update");
+  }
+  if ((PII_FIELDS as readonly string[]).includes(field)) {
+    return can(role, "personnel.pii", "update");
+  }
+  return can(role, "personnel", "update");
 }

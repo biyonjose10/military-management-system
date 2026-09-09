@@ -33,8 +33,27 @@ function createClient(): PrismaClient {
     );
   }
 
+  /**
+   * Pool size, capped by env when the database cannot take a real pool.
+   *
+   * Local development runs PGlite, which is a single Postgres instance behind a
+   * connection multiplexer. Several of these routes issue concurrent queries —
+   * a list and its count, five rollups on the dashboard — and under that load
+   * the multiplexer interleaves prepared statements and fails with
+   * `26000: unnamed prepared statement does not exist`. Setting
+   * DATABASE_POOL_MAX=1 makes Prisma serialise onto one connection, which
+   * removes the interleaving entirely at the cost of some local latency.
+   *
+   * Unset in production: Neon's pooled endpoint wants a real pool, and pg's
+   * default applies.
+   */
+  const poolMax = Number(process.env.DATABASE_POOL_MAX);
+
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString }),
+    adapter: new PrismaPg({
+      connectionString,
+      ...(Number.isInteger(poolMax) && poolMax > 0 ? { max: poolMax } : {}),
+    }),
     // Queries are noisy and can contain PII in their parameters; never log them.
     log: ["warn", "error"],
   });

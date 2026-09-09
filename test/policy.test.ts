@@ -123,8 +123,31 @@ describe("field-level write permission", () => {
     expect(canWriteField("COMMANDER", "medicalNotes")).toBe(false);
   });
 
+  it("lets ONLY the Medical Officer set deployability", () => {
+    // `readiness` is read by everyone and written by one role. It is the field
+    // the brief means by "medical readiness": a Commander may look at it and
+    // may not change it, because declaring a soldier non-deployable is a
+    // medical judgement rather than a command one. The login page tells users
+    // the Medical Officer is the only role that may write it, so this test is
+    // also what keeps that copy honest.
+    expect(canWriteField("MEDICAL_OFFICER", "readiness")).toBe(true);
+    expect(canWriteField("COMMANDER", "readiness")).toBe(false);
+    expect(canWriteField("QUARTERMASTER", "readiness")).toBe(false);
+    expect(canWriteField("SQUAD_LEADER", "readiness")).toBe(false);
+
+    const writers = ROLES.filter((r) => canWriteField(r, "readiness"));
+    expect(writers).toEqual(["MEDICAL_OFFICER"]);
+  });
+
+  it("still lets a Commander READ readiness", () => {
+    // The write restriction must not leak into visibility — readiness is on
+    // every roster row and is the dashboard's headline figure.
+    expect(fieldGroup("readiness")).toBe(null);
+  });
+
   it("routes an ordinary field through the personnel permission", () => {
     expect(canWriteField("COMMANDER", "rank")).toBe(true);
+    expect(canWriteField("COMMANDER", "lastName")).toBe(true);
     // A Medical Officer has read-only access to the roster, so writing a
     // non-medical field is refused even though they may write medical ones.
     expect(canWriteField("MEDICAL_OFFICER", "rank")).toBe(false);

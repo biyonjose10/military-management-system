@@ -66,7 +66,18 @@ export async function loadViewer(
     },
   });
 
-  if (!user || !user.active || user.tokenVersion !== tokenVersion) return null;
+  // `user.unit` is a required relation, so a null here means the read itself
+  // came back malformed rather than that the data is wrong. Returning null
+  // makes that a clean 401 instead of a TypeError on `.path` — which surfaced
+  // as an opaque 500 the first time the driver hiccuped under concurrency.
+  if (
+    !user ||
+    !user.active ||
+    user.tokenVersion !== tokenVersion ||
+    !user.unit
+  ) {
+    return null;
+  }
 
   return {
     id: user.id,
