@@ -121,8 +121,8 @@ scripts/verify.mts           invariant gate; DB checks skip loudly without a URL
 test/                        95 tests, all green, none needs a database
 ```
 
-Verified green on 2026-09-09: `typecheck`, `lint`, `test` (95), `verify` (8/8 invariants),
-`next build` (14 routes + proxy).
+Verified green on 2026-09-09: `typecheck`, `lint`, `test` (98), `verify` (8/8 invariants),
+`next build` (16 routes + proxy), `e2e` (3 Playwright tests).
 
 ## Verified by hand, in a browser, against real data
 
@@ -132,6 +132,16 @@ Verified green on 2026-09-09: `typecheck`, `lint`, `test` (95), `verify` (8/8 in
   403, which would confirm the record exists.
 - `cw2.petrov` (quartermaster) sees 604 items brigade-wide with assignees rendered as
   `SPC Calder ••••0418` — name for accountability, service number withheld.
+
+## CI and E2E
+
+`.github/workflows/ci.yml` runs **verify → test → typecheck → lint → build → e2e** on Node 22,
+starting PGlite as a background step rather than using a Postgres service container. It has never
+run on a GitHub runner — there is no remote — but every step was exercised locally, including a
+throwaway PGlite on port 5434 to prove the bootstrap works from an empty database.
+
+`e2e/segregation.spec.ts` needs `npx playwright install chromium` once, then `npm run e2e`. It
+needs the database up (`npm run db:up`) and reuses a dev server on 3111 if one is running.
 
 ## Still to do
 
