@@ -19,10 +19,20 @@
 import type { Personnel, Rank, RankCategory, ReadinessStatus } from "@prisma/client";
 
 import { can, type Role } from "@/lib/auth/policy";
+import {
+  hidden,
+  iso,
+  maskServiceId,
+  MEDICAL_REASON,
+  PII_REASON,
+  REDACTED,
+  visible,
+  type Field,
+} from "@/lib/dto/mask";
 
-export type Field<T> =
-  | { masked: false; value: T }
-  | { masked: true; value: string; reason: string };
+// Re-exported so existing importers of the personnel DTO keep working; the
+// definition itself lives in mask.ts, next to the functions that build one.
+export type { Field };
 
 export type MedicalBlock =
   | {
@@ -56,38 +66,6 @@ export type PersonnelDTO = {
 export type PersonnelRow = Personnel & {
   unit?: { id: number; designation: string; path: string } | null;
 };
-
-const PII_REASON =
-  "Personally identifiable information is visible to Commanders and Medical Officers only.";
-const MEDICAL_REASON =
-  "Medical readiness detail is visible to Commanders and Medical Officers only.";
-
-/** Full redaction. Used for anything whose shape itself would be a hint. */
-const REDACTED = "•••";
-
-/**
- * Service numbers keep their last four digits.
- *
- * This is a deliberate, narrow disclosure, not an oversight: a quartermaster
- * signing out a rifle has to be able to tell two soldiers apart on a form. Four
- * digits do that without handing over an identifier that indexes other systems.
- * Every other PII field is redacted whole.
- */
-function maskServiceId(serviceId: string): string {
-  return `•••••${serviceId.slice(-4)}`;
-}
-
-function visible<T>(value: T): Field<T> {
-  return { masked: false, value };
-}
-
-function hidden(value: string, reason: string): Field<never> {
-  return { masked: true, value, reason };
-}
-
-function iso(date: Date | null): string | null {
-  return date ? date.toISOString() : null;
-}
 
 export function toPersonnelDTO(row: PersonnelRow, role: Role): PersonnelDTO {
   const seePii = can(role, "personnel.pii", "read");

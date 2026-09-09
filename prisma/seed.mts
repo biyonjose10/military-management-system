@@ -134,6 +134,39 @@ async function main(): Promise<void> {
   });
   console.log(`  maintenance  ${needingWork.length}`);
 
+  // Individual weapons are signed for by name; vehicles and rations stay in the
+  // unit pool. Without this the property book shows "Unit pool" on every row and
+  // the assignee-masking path — the whole reason the equipment DTO is
+  // interesting — is never exercised by real data.
+  //
+  // Deterministic by construction: both sides are ordered by a unique column
+  // and zipped, so a re-run pairs the same rifle with the same soldier. Only
+  // unassigned items are touched, which is what keeps it idempotent.
+  let issued = 0;
+  for (const unit of units.filter((u) => u.echelon === "SQUAD")) {
+    const [soldiers, weapons] = await Promise.all([
+      prisma.personnel.findMany({
+        where: { unitId: unit.id, deletedAt: null },
+        orderBy: { serviceId: "asc" },
+        select: { id: true },
+      }),
+      prisma.equipment.findMany({
+        where: { unitId: unit.id, category: "WEAPON", assignedToId: null },
+        orderBy: { serialNumber: "asc" },
+        select: { id: true },
+      }),
+    ]);
+
+    for (let i = 0; i < weapons.length && i < soldiers.length; i += 1) {
+      await prisma.equipment.update({
+        where: { id: weapons[i].id },
+        data: { assignedToId: soldiers[i].id },
+      });
+      issued += 1;
+    }
+  }
+  console.log(`  issued       ${issued} weapons signed for by name`);
+
   const byDesignation = new Map(units.map((u) => [u.designation, u]));
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
