@@ -62,7 +62,7 @@ export async function loadViewer(
       unitId: true,
       active: true,
       tokenVersion: true,
-      unit: { select: { path: true } },
+      unit: { select: { path: true, designation: true } },
     },
   });
 
@@ -75,6 +75,7 @@ export async function loadViewer(
     role: user.role,
     unitId: user.unitId,
     unitPath: user.unit.path,
+    unitDesignation: user.unit.designation,
   };
 }
 

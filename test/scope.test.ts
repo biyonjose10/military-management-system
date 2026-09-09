@@ -36,6 +36,7 @@ function viewer(role: Role, unit: { id: number; path: string }): Viewer {
     role,
     unitId: unit.id,
     unitPath: unit.path,
+    unitDesignation: `UNIT-${unit.id}`,
   };
 }
 

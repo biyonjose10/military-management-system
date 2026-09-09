@@ -30,6 +30,8 @@ export type Viewer = {
   readonly unitId: number;
   /** Slash-terminated materialized path of the viewer's own unit, "/1/4/12/". */
   readonly unitPath: string;
+  /** Human-readable designation of that unit, for badges and audit labels. */
+  readonly unitDesignation: string;
 };
 
 declare const scopeBrand: unique symbol;

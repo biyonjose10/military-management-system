@@ -47,9 +47,23 @@ const globalForPrisma = globalThis as unknown as {
   prismaUnsafe?: PrismaClient;
 };
 
-export const prismaUnsafe: PrismaClient =
-  globalForPrisma.prismaUnsafe ?? createClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prismaUnsafe = prismaUnsafe;
-}
+/**
+ * Constructed on first use, not at import.
+ *
+ * `next build` imports every route module to collect page data, so an eager
+ * client turns a missing DATABASE_URL into a build failure on a machine that
+ * was never going to connect to anything. Deferring it means the variable is
+ * required when a query is actually made, which is when its absence is a real
+ * problem — and the error then names the route that needed it.
+ */
+export const prismaUnsafe: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, property) {
+    globalForPrisma.prismaUnsafe ??= createClient();
+    const client = globalForPrisma.prismaUnsafe;
+    const value = Reflect.get(client, property);
+    // Methods are bound to the real client, never to the proxy. `$transaction`
+    // and friends call other methods through `this`; left unbound they would
+    // re-enter this trap with the wrong receiver.
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});

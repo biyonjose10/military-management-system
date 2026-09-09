@@ -10,6 +10,7 @@ const VIEWER: Viewer = {
   role: "COMMANDER",
   unitId: 12,
   unitPath: "/1/4/12/",
+  unitDesignation: "2-14 IN / A",
 };
 
 describe("the diff records names, never values", () => {
