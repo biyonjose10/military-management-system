@@ -2,7 +2,7 @@
 
 # MMS — Military Management System
 
-**Status: Personnel and Equipment modules working against a live local database.**
+**Status: all four modules built and working against a live local database.**
 
 A personnel-readiness / equipment-logistics / RBAC admin dashboard. **Portfolio-demo project with
 entirely fictional data** — realistic security model, no accreditation claims, no real personnel data.
@@ -23,7 +23,12 @@ boundary; anything enforced only in `proxy.ts` or only in a component is a bug.
 | `requireViewer()` | identity, `active`, `tokenVersion` revocation | Yes |
 | `requirePermission()` / `canWriteField()` | the RBAC matrix, per field | Yes |
 | repository + branded `Scope` | row-level unit scoping + soft delete | Yes |
-| `toPersonnelDTO()` | field-level PII masking | Yes |
+| `toPersonnelDTO()` / `toEquipmentDTO()` | field-level PII masking | Yes |
+
+`requirePermission()` is for ROUTE HANDLERS — it throws and `errorResponse()` maps it to 403.
+Pages use **`requirePageScope()`**, which calls Next's `forbidden()` and renders `app/forbidden.tsx`
+with a real 403. A page that throws `ForbiddenError` instead hits the error boundary and renders
+"something went wrong" as a **500**, which is both the wrong status and a worse message.
 
 ## The database — no longer blocked
 
@@ -97,6 +102,13 @@ lib/db/repositories/         personnel.ts, users.ts — every fn takes a Scope f
 lib/dto/personnel.ts         toPersonnelDTO — where masking happens
 lib/audit/log.ts             entry builder + diff + client IP. PURE
 lib/ranks.ts lib/units.ts    shared derived-data helpers. PURE
+lib/db/repositories/audit.ts      read-only; there is no create() on purpose
+lib/db/repositories/rollups.ts    dashboard aggregations, all scoped
+lib/dto/audit.ts             needs no masking — entries never hold values
+app/(app)/dashboard/         hero rate, two stacked bars, overdue list
+app/(app)/audit/             the trail, Commander only
+app/forbidden.tsx            the real 403 page
+components/StatusBarChart.tsx     recharts; status palette, validated
 lib/dto/mask.ts              the masking primitives, shared by both DTOs
 lib/dto/equipment.ts         toEquipmentDTO — masks the ASSIGNEE's service number
 lib/db/repositories/equipment.ts  + openMaintenance / closeMaintenance
@@ -123,14 +135,12 @@ Verified green on 2026-09-09: `typecheck`, `lint`, `test` (95), `verify` (8/8 in
 
 ## Still to do
 
-1. `e2e/segregation.spec.ts` — automate the two checks above, which are currently only verified
-   by hand. Needs `npx playwright install`.
-2. The recharts command dashboard.
-3. An audit-log viewer. The trail is written on every mutation but nothing reads it yet, and
-   `can(COMMANDER, "audit", "read")` is already true.
-4. CI mirroring crucible's `verify → test → typecheck → lint → build`, and the `scan-secrets`
-   pre-commit hook. CI needs `db:up` as a service step before `verify`.
-5. No git remote yet — pushing needs a decision on repo visibility.
+1. No git remote yet — pushing needs a decision on repo visibility.
+2. A `scan-secrets` pre-commit hook, as in crucible.
+3. Nothing writes `LOGIN_SUCCESS` / `LOGIN_FAILURE` / `PERMISSION_DENIED` audit actions yet; the
+   enum has them and the credentials provider is the obvious place.
+4. Equipment and personnel are read-only in the UI — the write endpoints exist and are audited,
+   but no form calls them. The demo drives them through the API.
 
 ## Commands
 
