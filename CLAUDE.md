@@ -75,6 +75,17 @@ Two PGlite limitations, both local-only and both real:
 - **`shadcn init` rewrites `app/globals.css`.** Already run (`radix` base, `nova` preset); the house
   token set is now layered on top, aliasing `--background`/`--foreground`/`--border`/`--ring` onto
   `--bg`/`--ink`/`--line`. Do not re-run `init`.
+- **`readiness` is medically writable, not command-writable.** A Commander may read it and may
+  not set it; the Medical Officer is the only role that may. Read groups and write groups are
+  separate mappings in `policy.ts` (`fieldGroup` vs `MEDICALLY_WRITABLE`) precisely because this
+  field is public to read and restricted to write. The login page states this rule, so inverting
+  it makes the UI lie.
+- **`DATABASE_POOL_MAX=1` is required against PGlite.** Its multiplexer garbles prepared statements
+  (`26000: unnamed prepared statement does not exist`) when concurrent queries interleave, and
+  these routes legitimately run `Promise.all`. Setting PGlite's own `--max-connections=1` instead
+  is worse — it closes the second connection and every concurrent query fails with `P1017`.
+- **`proxy.ts` does not match `/api/**`.** A 307 to an HTML login form is useless to a JSON client;
+  route handlers answer 401 themselves.
 - `AuditLog` stores changed field **names, never values**. Storing values makes the audit viewer a
   complete bypass of the masking layer.
 - Zod patch schemas are `.strict()` so a forbidden field returns **403 naming the field** rather

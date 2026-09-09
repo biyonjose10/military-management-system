@@ -42,10 +42,19 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   /**
-   * Everything except the login page, the auth endpoints, and static assets.
-   * Without a matcher this runs on `_next/static` too and redirects the CSS.
+   * Page navigations only.
+   *
+   * `/api/**` is excluded deliberately. A redirect is the right answer for a
+   * browser that has wandered to a page it is not signed in for; it is the
+   * wrong answer for a JSON client, which would otherwise receive a 307 to an
+   * HTML login form instead of the 401 it can actually act on. Route handlers
+   * authenticate themselves through `requireViewer()` and answer in JSON —
+   * which they must do regardless, since this file is not a boundary.
+   *
+   * Static assets are excluded because without a matcher this also runs on
+   * `_next/static` and redirects the CSS.
    */
   matcher: [
-    "/((?!login|api/auth|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico)$).*)",
+    "/((?!login|api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico)$).*)",
   ],
 };
