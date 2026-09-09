@@ -10,5 +10,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/**/*.test.ts"],
+    // The generated Prisma client is a large module to transform on every run.
+    fsModuleCache: true,
   },
 });
