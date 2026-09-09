@@ -2,7 +2,7 @@
 
 # MMS — Military Management System
 
-**Status: Personnel slice code-complete. Nothing has ever run against a database.**
+**Status: Personnel and Equipment modules working against a live local database.**
 
 A personnel-readiness / equipment-logistics / RBAC admin dashboard. **Portfolio-demo project with
 entirely fictional data** — realistic security model, no accreditation claims, no real personnel data.
@@ -25,18 +25,28 @@ boundary; anything enforced only in `proxy.ts` or only in a component is a bug.
 | repository + branded `Scope` | row-level unit scoping + soft delete | Yes |
 | `toPersonnelDTO()` | field-level PII masking | Yes |
 
-## Blocking dependency — the only thing stopping the next step
+## The database — no longer blocked
 
-A free Neon Postgres project: the pooled `DATABASE_URL` (host contains `-pooler`) and the
-unpooled `DIRECT_URL`. Put both in `.env.local` (see `.env.example`), then:
+Local development runs **PGlite**: Postgres compiled to WASM, served over the real Postgres wire
+protocol by `@electric-sql/pglite-socket`, so `@prisma/adapter-pg` talks to it as an ordinary
+server. No account, no installer, no admin rights, no Docker.
 
 ```
-npm run db:migrate -- --name init
-npm run db:seed
-npm run verify        # its 5 database invariants stop skipping
+npm run db:up      # starts it on 127.0.0.1:5433, leave running
+npm run db:push    # apply the schema (see the migrate caveat below)
+npm run db:seed    # idempotent; re-running inserts nothing
+npm run verify     # all 8 invariants
 ```
 
-`.env.local` already exists with a working `AUTH_SECRET` and no database URLs.
+`.env.local` already points at it. **Swapping in Neon later is two lines of `.env.local` and
+nothing else** — the pooled URL for `DATABASE_URL`, the unpooled one for `DIRECT_URL`.
+
+Two PGlite limitations, both local-only and both real:
+- `prisma migrate dev` needs a **shadow database** and PGlite has exactly one, so local schema
+  changes go through `db push`. `prisma/migrations/0_init/migration.sql` is generated via
+  `migrate diff` and kept for a hosted Postgres.
+- `prisma migrate resolve` also fails against it. Do not try to fix this; use a real Postgres
+  when migration history starts to matter.
 
 ## Hard-won facts — do not regress these
 
@@ -87,25 +97,40 @@ lib/db/repositories/         personnel.ts, users.ts — every fn takes a Scope f
 lib/dto/personnel.ts         toPersonnelDTO — where masking happens
 lib/audit/log.ts             entry builder + diff + client IP. PURE
 lib/ranks.ts lib/units.ts    shared derived-data helpers. PURE
+lib/dto/mask.ts              the masking primitives, shared by both DTOs
+lib/dto/equipment.ts         toEquipmentDTO — masks the ASSIGNEE's service number
+lib/db/repositories/equipment.ts  + openMaintenance / closeMaintenance
+app/(app)/equipment/         property book with status rollup; item detail
+app/api/equipment/           list / create / detail / patch / soft delete
+app/api/.../maintenance      open a fault; close one at /api/maintenance/[id]/close
 prisma/fixtures.mts          the seed's rows as plain objects. No DB. PURE
-prisma/seed.mts              160 units / 1,128 personnel / ~640 items / 8 users
+prisma/seed.mts              160 units / 1,128 personnel / 604 items / 8 users
 scripts/verify.mts           invariant gate; DB checks skip loudly without a URL
-test/                        84 tests, all green, none needs a database
+test/                        95 tests, all green, none needs a database
 ```
 
-Verified green on 2026-09-09: `typecheck`, `lint`, `test` (84), `verify` (3 static ok, 5 skipped),
-`next build` (8 routes + proxy).
+Verified green on 2026-09-09: `typecheck`, `lint`, `test` (95), `verify` (8/8 invariants),
+`next build` (14 routes + proxy).
+
+## Verified by hand, in a browser, against real data
+
+- `sgt.calder` (squad leader) sees exactly 9 records — own squad, not the sibling squad, not the
+  parent platoon. Every service number masked to its last four.
+- Requesting a sibling squad's soldier by id returns **404 from both the page and the API**. Not
+  403, which would confirm the record exists.
+- `cw2.petrov` (quartermaster) sees 604 items brigade-wide with assignees rendered as
+  `SPC Calder ••••0418` — name for accountability, service number withheld.
 
 ## Still to do
 
-1. **Neon URLs**, then migrate + seed + `verify` (above). Nothing below can be trusted until then.
-2. `e2e/segregation.spec.ts` — sign in as `sgt.calder@example.mil`, request a soldier from
-   `2SQD` by id, expect 404 rather than a rendered record.
-3. Equipment / logistics module — reuse `Scope`, the repository shape and the audit machinery.
-4. The recharts command dashboard.
-5. CI mirroring crucible's `verify → test → typecheck → lint → build`, and the `scan-secrets`
-   pre-commit hook.
-6. No git remote yet — pushing needs a decision on repo visibility.
+1. `e2e/segregation.spec.ts` — automate the two checks above, which are currently only verified
+   by hand. Needs `npx playwright install`.
+2. The recharts command dashboard.
+3. An audit-log viewer. The trail is written on every mutation but nothing reads it yet, and
+   `can(COMMANDER, "audit", "read")` is already true.
+4. CI mirroring crucible's `verify → test → typecheck → lint → build`, and the `scan-secrets`
+   pre-commit hook. CI needs `db:up` as a service step before `verify`.
+5. No git remote yet — pushing needs a decision on repo visibility.
 
 ## Commands
 
