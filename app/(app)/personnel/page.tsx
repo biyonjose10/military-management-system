@@ -1,6 +1,6 @@
 import { PersonnelTable } from "@/components/PersonnelTable";
 import { ReadinessBadge } from "@/components/ReadinessBadge";
-import { requireScopeWith } from "@/lib/auth/session";
+import { requirePageScope } from "@/lib/auth/session";
 import { readinessBreakdown } from "@/lib/db/repositories/personnel";
 
 export const metadata = { title: "Personnel — MMS" };
@@ -11,7 +11,7 @@ export const metadata = { title: "Personnel — MMS" };
  * and the rows can never describe different populations.
  */
 export default async function PersonnelPage() {
-  const scope = await requireScopeWith("personnel", "read");
+  const scope = await requirePageScope("personnel", "read");
   const counts = await readinessBreakdown(scope);
   const total = counts.DEPLOYABLE + counts.LIMITED_DUTY + counts.NON_DEPLOYABLE;
 

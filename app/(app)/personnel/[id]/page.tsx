@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { MaskedField } from "@/components/MaskedField";
 import { ReadinessBadge } from "@/components/ReadinessBadge";
-import { requireScopeWith } from "@/lib/auth/session";
+import { requirePageScope } from "@/lib/auth/session";
 import { getPersonnel } from "@/lib/db/repositories/personnel";
 import { toPersonnelDTO } from "@/lib/dto/personnel";
 import { RANK_ABBREVIATIONS } from "@/lib/ranks";
@@ -20,7 +20,7 @@ export default async function PersonnelDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const scope = await requireScopeWith("personnel", "read");
+  const scope = await requirePageScope("personnel", "read");
   const { id } = await params;
 
   const row = await getPersonnel(scope, id);

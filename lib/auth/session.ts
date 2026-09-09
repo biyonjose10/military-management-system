@@ -1,5 +1,7 @@
 import "server-only";
 
+import { forbidden, redirect } from "next/navigation";
+
 import { auth } from "@/lib/auth/config";
 import { can, type Action, type Resource } from "@/lib/auth/policy";
 import { resolveScope, type Scope, type Viewer } from "@/lib/auth/scope";
@@ -66,12 +68,46 @@ export function requirePermission(
   }
 }
 
-/** Convenience for the common "authenticate, then check one permission" opening. */
+/**
+ * For ROUTE HANDLERS: authenticate, check one permission, hand back a scope.
+ * Throws, and `errorResponse()` turns the throw into 401/403.
+ */
 export async function requireScopeWith(
   resource: Resource,
   action: Action,
 ): Promise<Scope> {
   const viewer = await requireViewer();
   requirePermission(viewer, resource, action);
+  return resolveScope(viewer);
+}
+
+/**
+ * For PAGES. Same checks, different failure shape.
+ *
+ * A page cannot throw ForbiddenError and get a sensible result — it hits the
+ * error boundary, which renders "something went wrong" with a 500. Both the
+ * status and the message are wrong: nothing went wrong, the viewer is simply
+ * not allowed, and that deserves saying.
+ *
+ * `redirect()` and `forbidden()` work by throwing sentinel errors, so neither
+ * may sit inside a try/catch — a catch swallows the interrupt and no
+ * redirect or 403 page renders. The try below deliberately wraps ONLY
+ * requireViewer(), and re-throws anything that is not an auth failure so a
+ * database outage cannot masquerade as a signed-out session.
+ */
+export async function requirePageScope(
+  resource: Resource,
+  action: Action,
+): Promise<Scope> {
+  let viewer: Viewer;
+  try {
+    viewer = await requireViewer();
+  } catch (error) {
+    if (!(error instanceof UnauthorizedError)) throw error;
+    redirect("/login");
+  }
+
+  if (!can(viewer.role, resource, action)) forbidden();
+
   return resolveScope(viewer);
 }

@@ -30,6 +30,39 @@ describe("the diff records names, never values", () => {
     ).toEqual(["at"]);
   });
 
+  it("ignores fields that change on every write", () => {
+    // `updatedAt` always differs, so listing it pads every entry with noise and
+    // trains people to stop reading the list.
+    const before = { rank: "SERGEANT", updatedAt: new Date("2026-01-01") };
+    const after = { rank: "SERGEANT", updatedAt: new Date("2026-06-01") };
+    expect(changedFieldNames(before, after)).toEqual([]);
+  });
+
+  it("ignores joined relations", () => {
+    // REGRESSION: the repositories read `before` without relations and `after`
+    // with them, so a naive diff reported `unit` and `assignedTo` as changed on
+    // every single patch. An audit trail that overstates what changed is worse
+    // than one that is merely terse — it cannot be trusted at all.
+    const before = { name: "Truck" };
+    const after = {
+      name: "Truck, up-armoured",
+      unit: { id: 3, designation: "2-14 IN" },
+      assignedTo: { id: "p1", lastName: "Okonkwo" },
+      maintenanceLogs: [{ id: "m1" }],
+    };
+    expect(changedFieldNames(before, after)).toEqual(["name"]);
+  });
+
+  it("still reports a genuine null-to-value change", () => {
+    // The relation filter must not swallow real edits to nullable columns.
+    expect(changedFieldNames({ medicalNotes: null }, { medicalNotes: "x" })).toEqual([
+      "medicalNotes",
+    ]);
+    expect(changedFieldNames({ deletedAt: null }, { deletedAt: new Date() })).toEqual([
+      "deletedAt",
+    ]);
+  });
+
   it("puts no value anywhere in the audit entry", () => {
     const secret = "Grade II ankle sprain; no ruck marches until cleared.";
     const entry = auditEntry({

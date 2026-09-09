@@ -1,12 +1,12 @@
 import { EquipmentTable } from "@/components/EquipmentTable";
 import { EquipmentStatusBadge } from "@/components/ReadinessBadge";
-import { requireScopeWith } from "@/lib/auth/session";
+import { requirePageScope } from "@/lib/auth/session";
 import { equipmentBreakdown } from "@/lib/db/repositories/equipment";
 
 export const metadata = { title: "Equipment — MMS" };
 
 export default async function EquipmentPage() {
-  const scope = await requireScopeWith("equipment", "read");
+  const scope = await requirePageScope("equipment", "read");
   const counts = await equipmentBreakdown(scope);
   const total = counts.OPERATIONAL + counts.IN_MAINTENANCE + counts.DEADLINE;
 

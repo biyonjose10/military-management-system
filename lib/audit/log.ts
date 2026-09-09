@@ -18,6 +18,16 @@ import type { AuditAction, Prisma } from "@prisma/client";
 import type { Viewer } from "@/lib/auth/scope";
 
 /**
+ * Always excluded from a diff.
+ *
+ * `updatedAt` changes on every write by definition, so recording it says
+ * nothing and pads every entry with noise. `id` and `createdAt` cannot change
+ * at all. An entry that lists four fields when one was edited trains people to
+ * stop reading the list, which costs more than the missing detail.
+ */
+const NEVER_INTERESTING = new Set(["id", "createdAt", "updatedAt"]);
+
+/**
  * Field NAMES only. Never values.
  *
  * Storing "medicalNotes changed from X to Y" would make the audit viewer a
@@ -25,12 +35,28 @@ import type { Viewer } from "@/lib/auth/scope";
  * detail could read every past version of it from the trail. This is the single
  * most tempting mistake in the whole design, and it looks like an improvement
  * when someone makes it.
+ *
+ * Only keys present in BOTH objects are compared.
+ *
+ * That single rule is what keeps joined relations out of the diff. The
+ * repositories read `before` as a bare row and `after` with its relations
+ * included, so `unit`, `assignedTo` and `maintenanceLogs` exist only on one
+ * side. Comparing every key of `after` reported all three as changed on every
+ * patch — an audit trail that overstates what changed cannot be trusted at
+ * all, which is worse than one that is merely terse.
+ *
+ * Keying on presence rather than sniffing types is deliberate: an
+ * `Array.isArray` or `typeof === "object"` test has to guess whether a value
+ * is a to-many join or a scalar list column, and it guesses wrong the first
+ * time someone adds a `String[]`.
  */
 export function changedFieldNames(
   before: Record<string, unknown>,
   after: Record<string, unknown>,
 ): string[] {
   return Object.keys(after)
+    .filter((key) => key in before)
+    .filter((key) => !NEVER_INTERESTING.has(key))
     .filter((key) => !sameValue(before[key], after[key]))
     .sort();
 }
@@ -38,6 +64,11 @@ export function changedFieldNames(
 function sameValue(a: unknown, b: unknown): boolean {
   if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
   if (a instanceof Date || b instanceof Date) return false;
+  // Scalar list columns come back as a new array object on every read, so
+  // Object.is would report an unchanged `String[]` as changed every time.
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => sameValue(v, b[i]));
+  }
   return Object.is(a, b);
 }
 
