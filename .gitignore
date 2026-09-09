@@ -41,3 +41,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local PGlite database files. `npm run db:up` recreates them; `npm run db:seed`
+# refills them. Never committed — they are a build artefact, not source.
+/.pglite

@@ -17,7 +17,10 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:up": "pglite-server --db=./.pglite --port=5433 --max-connections=10",
+    "db:push": "prisma db push",
+    "db:reset": "prisma db push --force-reset"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",
@@ -39,6 +42,8 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22.20.1",
