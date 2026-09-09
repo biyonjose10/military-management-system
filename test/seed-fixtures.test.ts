@@ -1,3 +1,4 @@
+import type { Rank, RankCategory } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -5,12 +6,12 @@ import {
   buildEquipment,
   buildMaintenanceLogs,
   buildPersonnel,
-  categoryOf,
   DEMO_USERS,
   flattenTree,
   makeRng,
   UNIT_TREE,
 } from "@/prisma/fixtures.mjs";
+import { categoryOf } from "@/lib/ranks";
 import { isWellFormedPath } from "@/lib/units";
 
 /**
@@ -85,8 +86,12 @@ describe("the roster", () => {
   });
 
   it("has a rank pyramid, not a uniform sample", () => {
-    const counts = { OFFICER: 0, WARRANT: 0, ENLISTED: 0 };
-    for (const p of personnel) counts[categoryOf(p.rank)] += 1;
+    const counts: Record<RankCategory, number> = {
+      OFFICER: 0,
+      WARRANT: 0,
+      ENLISTED: 0,
+    };
+    for (const p of personnel) counts[categoryOf(p.rank as Rank)] += 1;
 
     const pct = (n: number) => (n / personnel.length) * 100;
     expect(pct(counts.OFFICER)).toBeGreaterThan(5);

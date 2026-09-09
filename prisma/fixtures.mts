@@ -20,10 +20,11 @@ import type {
   EquipmentCategory,
   Prisma,
   Rank,
-  RankCategory,
   ReadinessStatus,
   Role,
 } from "@prisma/client";
+
+import { categoryOf } from "../lib/ranks";
 
 export type Echelon = "BRIGADE" | "BATTALION" | "COMPANY" | "PLATOON" | "SQUAD";
 
@@ -163,22 +164,6 @@ export function flattenTree(node: UnitNode = UNIT_TREE): SeededUnit[] {
 // ---------------------------------------------------------------------------
 // Personnel
 // ---------------------------------------------------------------------------
-
-const OFFICER_RANKS: Rank[] = [
-  "SECOND_LIEUTENANT", "FIRST_LIEUTENANT", "CAPTAIN", "MAJOR",
-  "LIEUTENANT_COLONEL", "COLONEL",
-];
-
-const WARRANT_RANKS: Rank[] = [
-  "WARRANT_OFFICER_1", "CHIEF_WARRANT_OFFICER_2", "CHIEF_WARRANT_OFFICER_3",
-  "CHIEF_WARRANT_OFFICER_4", "CHIEF_WARRANT_OFFICER_5",
-];
-
-export function categoryOf(rank: Rank): RankCategory {
-  if (OFFICER_RANKS.includes(rank)) return "OFFICER";
-  if (WARRANT_RANKS.includes(rank)) return "WARRANT";
-  return "ENLISTED";
-}
 
 /**
  * Billets per echelon, written out rather than sampled from a distribution.
