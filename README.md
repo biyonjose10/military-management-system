@@ -78,16 +78,31 @@ the design, and the one that looks like an improvement when someone makes it.
 
 Node 22. No Docker, no Postgres install, no cloud account.
 
+### First time
+
 ```bash
 npm install
-cp .env.example .env.local          # then set AUTH_SECRET; the PGlite URLs below already work
+cp .env.example .env.local          # set AUTH_SECRET; the PGlite URLs already work
 
-npm run db:up                       # leave running — local Postgres on 127.0.0.1:5433
-npm run db:push                     # apply the schema
-npm run db:seed                     # 160 units, 1,128 personnel, 604 items, 8 users
-
-npm run dev
+npm run db:up                       # terminal 1 — leave it running
+npm run db:push                     # terminal 2 — apply the schema
+npm run db:seed                     #             160 units, 1,128 personnel, 604 items, 8 users
+npm run dev                         #             http://localhost:3000
 ```
+
+### Every time after that
+
+Two terminals, and the database has to come up first or the app errors on its
+first query. `.pglite/` is a real Postgres data directory on disk, so the seeded
+data survives a reboot — there is no need to push or seed again.
+
+```bash
+npm run db:up                       # terminal 1 — leave it running
+npm run dev                         # terminal 2 — http://localhost:3000
+```
+
+Use `npm run build && npm start` instead of `npm run dev` to serve the
+production build.
 
 The database is **PGlite** — Postgres compiled to WebAssembly, served over the real Postgres wire
 protocol, so Prisma connects to it as an ordinary server. Real Postgres matters here: the schema
