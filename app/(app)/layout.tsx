@@ -25,6 +25,9 @@ export default async function AppLayout({
   if (!viewer) redirect("/login");
 
   const links = [
+    // The dashboard aggregates personnel and equipment, so it is gated on the
+    // narrower of the two rather than given a permission of its own.
+    { href: "/dashboard", label: "Dashboard", show: can(viewer.role, "personnel", "read") },
     { href: "/personnel", label: "Personnel", show: can(viewer.role, "personnel", "read") },
     { href: "/equipment", label: "Equipment", show: can(viewer.role, "equipment", "read") },
     { href: "/audit", label: "Audit", show: can(viewer.role, "audit", "read") },
@@ -34,7 +37,7 @@ export default async function AppLayout({
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-line bg-surface/60 backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
-          <Link href="/personnel" className="text-sm font-semibold tracking-tight">
+          <Link href="/dashboard" className="text-sm font-semibold tracking-tight">
             MMS
           </Link>
 
