@@ -45,3 +45,8 @@ next-env.d.ts
 # Local PGlite database files. `npm run db:up` recreates them; `npm run db:seed`
 # refills them. Never committed — they are a build artefact, not source.
 /.pglite
+
+# Playwright output. Regenerated on every run; the report is uploaded as a CI
+# artifact on failure rather than committed.
+/test-results
+/playwright-report

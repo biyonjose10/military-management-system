@@ -1,0 +1,112 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    # Not secrets, and deliberately not stored as such. AUTH_SECRET only has to
+    # exist for NextAuth to initialise during `next build`; the database is
+    # PGlite on loopback, seeded from scratch in this job and destroyed with the
+    # runner. A repository secret here would imply there is something to protect.
+    env:
+      AUTH_SECRET: ci-not-a-secret-fictional-demo-data-only
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5433/postgres
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5433/postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # No `services: postgres:` block, on purpose.
+      #
+      # The whole reason this project runs PGlite — Postgres compiled to WASM,
+      # served over the real wire protocol — is that it needs no server, no
+      # container and no admin rights. A service container in CI would mean the
+      # pipeline no longer tests the setup anybody actually develops against,
+      # and the day PGlite diverged from Postgres, CI would be the last place
+      # to notice.
+      #
+      # stdout goes to a file so the step returns instead of blocking on the
+      # pipe; the process outlives the step, which is how a backgrounded server
+      # is expected to work on a runner.
+      - name: Start PGlite
+        run: nohup npm run db:up > /tmp/pglite.log 2>&1 &
+
+      - name: Wait for PGlite
+        run: |
+          for _ in $(seq 1 60); do
+            if node -e "const s=require('net').connect(5433,'127.0.0.1');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"; then
+              echo "PGlite accepting connections"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PGlite never came up:"
+          cat /tmp/pglite.log
+          exit 1
+
+      # `db push`, not `migrate deploy`. PGlite has exactly one database and the
+      # migrate engine wants a shadow one — see CLAUDE.md. The committed
+      # migration in prisma/migrations exists for a hosted Postgres.
+      - name: Apply schema
+        run: npm run db:push
+
+      - name: Seed
+        run: npm run db:seed
+
+      # First, because five of its eight invariants compare two artefacts in the
+      # database that are meant to agree — a materialized path against its
+      # parent pointers, a user's cached unitPath against their unit. Those are
+      # the checks that go wrong silently, and a build that passed on a database
+      # whose scoping data is inconsistent proved nothing.
+      - name: Verification gate
+        run: npm run verify
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The lint config is a security boundary here, not a style pass: it is
+      # what stops a route handler importing the unscoped Prisma client and
+      # querying the whole roster with no `where`.
+      - name: Lint
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+
+      # Last, and only chromium. The segregation spec drives a real browser
+      # through a real sign-in, so it is the slowest thing here and the one
+      # most worth having: it is the only check that proves a squad leader
+      # cannot reach a sibling squad's record through the actual HTTP stack
+      # rather than through a function call in a unit test.
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Segregation E2E
+        run: npm run e2e
+
+      - name: Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: PGlite log
+        if: failure()
+        run: cat /tmp/pglite.log
