@@ -1,5 +1,7 @@
+import { NewPersonnelForm } from "@/components/NewPersonnelForm";
 import { PersonnelTable } from "@/components/PersonnelTable";
 import { ReadinessBadge } from "@/components/ReadinessBadge";
+import { can } from "@/lib/auth/policy";
 import { requirePageScope } from "@/lib/auth/session";
 import { readinessBreakdown } from "@/lib/db/repositories/personnel";
 
@@ -14,6 +16,11 @@ export default async function PersonnelPage() {
   const scope = await requirePageScope("personnel", "read");
   const counts = await readinessBreakdown(scope);
   const total = counts.DEPLOYABLE + counts.LIMITED_DUTY + counts.NON_DEPLOYABLE;
+
+  // Presentation only. POST /api/personnel runs the same check itself, so a
+  // role that reaches the endpoint directly is refused whether or not this
+  // page decided to draw the button.
+  const mayCreate = can(scope.viewer.role, "personnel", "create");
 
   return (
     <div className="space-y-8">
@@ -54,6 +61,8 @@ export default async function PersonnelPage() {
           </div>
         ))}
       </dl>
+
+      {mayCreate ? <NewPersonnelForm /> : null}
 
       <PersonnelTable />
     </div>

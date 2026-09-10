@@ -75,6 +75,15 @@ Two PGlite limitations, both local-only and both real:
 - **`shadcn init` rewrites `app/globals.css`.** Already run (`radix` base, `nova` preset); the house
   token set is now layered on top, aliasing `--background`/`--foreground`/`--border`/`--ring` onto
   `--bg`/`--ink`/`--line`. Do not re-run `init`.
+- **The create forms are hidden by `can()`, not protected by it.** `NewPersonnelForm` and
+  `NewEquipmentForm` render only where the role may create, but `requirePermission()` inside the
+  POST handlers is the actual boundary — verified by fetching the endpoints directly as a
+  Quartermaster (403 on personnel) and a Squad Leader (403 on equipment). A button that always
+  fails is a bad affordance; that is the only reason it is hidden.
+- **`personnelCreateSchema` accepts `readiness` and POST does not run `canWriteField` on it**, so a
+  Commander creating a soldier could set deployability the PATCH route would refuse them. The form
+  therefore offers no readiness input and new soldiers take the schema default. The gap is in the
+  API, not the UI — closing it means a field-level check in the create handler.
 - **`readiness` is medically writable, not command-writable.** A Commander may read it and may
   not set it; the Medical Officer is the only role that may. Read groups and write groups are
   separate mappings in `policy.ts` (`fieldGroup` vs `MEDICALLY_WRITABLE`) precisely because this
@@ -118,6 +127,11 @@ lib/db/repositories/rollups.ts    dashboard aggregations, all scoped
 lib/dto/audit.ts             needs no masking — entries never hold values
 app/(app)/dashboard/         hero rate, two stacked bars, overdue list
 app/(app)/audit/             the trail, Commander only
+app/api/units/               GET the units in scope; feeds the create pickers
+lib/db/repositories/units.ts read-only, scoped. No create/update/delete on purpose
+components/CreatePanel.tsx   shared chrome + fields for both create forms
+components/NewPersonnelForm.tsx   Commander only. Deliberately has no readiness input
+components/NewEquipmentForm.tsx   Quartermaster only. No status, no assignee
 app/forbidden.tsx            the real 403 page
 components/StatusBarChart.tsx     recharts; status palette, validated
 lib/dto/mask.ts              the masking primitives, shared by both DTOs

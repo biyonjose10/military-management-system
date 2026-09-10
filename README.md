@@ -110,6 +110,27 @@ uses enums and a `String[]` column that SQLite would have flattened into strings
 
 Moving to a hosted Postgres (Neon and the like) is two lines of `.env.local` and nothing else.
 
+### Adding records
+
+Two roles can write new rows from the browser, and only those two:
+
+| Page | Who sees the form | What it creates |
+| --- | --- | --- |
+| `/personnel` | Commander | A soldier, in any unit at or below their own |
+| `/equipment` | Quartermaster | An item on the property book, unissued |
+
+The unit dropdown is filled from `/api/units`, which returns only the units in
+the viewer's scope — a squad leader's list has exactly one entry.
+
+Hiding the button is presentation. The boundary is `requirePermission()` inside
+`POST /api/personnel` and `POST /api/equipment`, so a Quartermaster who posts to
+the personnel endpoint by hand gets a 403 naming the rule, not a record. Every
+create lands in the audit trail as a CREATE against the account that made it.
+
+The personnel form has no readiness control on purpose: a Commander may read
+deployability and may not set it, so a new soldier starts Deployable and the
+Medical Officer decides otherwise.
+
 ### Demo accounts
 
 Password for all of them: `Bravo-Zulu-2026`. The login page lists them too.

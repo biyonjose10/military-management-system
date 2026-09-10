@@ -1,5 +1,7 @@
 import { EquipmentTable } from "@/components/EquipmentTable";
+import { NewEquipmentForm } from "@/components/NewEquipmentForm";
 import { EquipmentStatusBadge } from "@/components/ReadinessBadge";
+import { can } from "@/lib/auth/policy";
 import { requirePageScope } from "@/lib/auth/session";
 import { equipmentBreakdown } from "@/lib/db/repositories/equipment";
 
@@ -9,6 +11,9 @@ export default async function EquipmentPage() {
   const scope = await requirePageScope("equipment", "read");
   const counts = await equipmentBreakdown(scope);
   const total = counts.OPERATIONAL + counts.IN_MAINTENANCE + counts.DEADLINE;
+
+  // Presentation only, as on the roster: POST /api/equipment enforces this.
+  const mayCreate = can(scope.viewer.role, "equipment", "create");
 
   return (
     <div className="space-y-8">
@@ -49,6 +54,8 @@ export default async function EquipmentPage() {
           </div>
         ))}
       </dl>
+
+      {mayCreate ? <NewEquipmentForm /> : null}
 
       <EquipmentTable />
     </div>
